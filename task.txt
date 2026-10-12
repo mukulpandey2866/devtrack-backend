@@ -1,0 +1,611 @@
+# Project: DevTrack — Complete Backend and Deployment-Ready Implementation
+
+Act as a senior Java backend engineer, Spring Boot architect, PostgreSQL database engineer, security engineer, and DevOps engineer.
+
+I am building **DevTrack**, a Jira-like project and issue management application. I want a complete, secure, maintainable backend that can be deployed publicly and integrated with a React frontend.
+
+Do not just give me recommendations or example snippets. Inspect my existing repository, implement the code, run the available tests, fix errors, and document the result.
+
+## 1. Existing technology stack
+
+Use the existing project configuration wherever possible.
+
+- Java 21
+- Spring Boot 3.x, retaining the compatible version already configured
+- Maven
+- Spring Web
+- Spring Data JPA
+- Hibernate ORM
+- PostgreSQL
+- Neon hosted PostgreSQL database
+- Jakarta Bean Validation
+- Spring Security
+- BCrypt password hashing
+- JWT-based authentication
+- Flyway for database schema migrations
+- JUnit 5, Spring Boot Test, Mockito and Testcontainers where appropriate
+- Docker for deployment
+- React frontend will be developed/deployed separately
+
+Existing application name: `devtrack-backend`
+
+Base Java package: `com.devtrack`
+
+The existing application already connects successfully to Neon, and the initial `User` entity, `PlatformRole` enum, `UserRepository`, and a repository connection test have been implemented.
+
+Before modifying anything, inspect the repository, `pom.xml`, `application.properties`, existing Java classes, tests, and the current database schema assumptions. Reuse working code where appropriate.
+
+Do not blindly replace the existing project or upgrade major dependency versions without a clear reason.
+
+## 2. Database information
+
+The database is PostgreSQL hosted on Neon. The database and tables have already been created manually.
+
+Important: inspect and reconcile the current schema before generating migrations. Do not drop tables, delete data, recreate the database, or overwrite existing records. Never assume the database is empty.
+
+Database connection information must come from environment variables:
+
+- `DB_JDBC_URL`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+
+The JDBC URL should use the PostgreSQL JDBC format and require TLS for the hosted Neon connection.
+
+Never commit actual credentials, connection strings containing passwords, JWT secrets, or other secrets.
+
+### Database schema
+
+The database contains the following nine core tables.
+
+### Table 1: `users`
+
+Columns:
+
+- `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+- `full_name VARCHAR(100) NOT NULL`
+- `email VARCHAR(255) NOT NULL UNIQUE`
+- `password_hash VARCHAR(255) NOT NULL`
+- `platform_role VARCHAR(20) NOT NULL DEFAULT 'USER'`
+- `is_active BOOLEAN NOT NULL DEFAULT TRUE`
+- `created_at TIMESTAMPTZ NOT NULL`
+- `updated_at TIMESTAMPTZ NOT NULL`
+
+Allowed `platform_role` values: `USER`, `ADMIN`.
+
+Use BCrypt for passwords. Never store plaintext passwords or return password hashes through API responses.
+
+### Table 2: `projects`
+
+Columns:
+
+- `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+- `name VARCHAR(150) NOT NULL`
+- `project_key VARCHAR(10) NOT NULL UNIQUE`
+- `description TEXT`
+- `status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'`
+- `owner_id UUID NOT NULL REFERENCES users(id)`
+- `created_at TIMESTAMPTZ NOT NULL`
+- `updated_at TIMESTAMPTZ NOT NULL`
+
+Allowed statuses: `ACTIVE`, `ON_HOLD`, `COMPLETED`, `ARCHIVED`.
+
+Validate project keys and keep them immutable after project creation unless a deliberate, authorized change mechanism is implemented.
+
+### Table 3: `project_members`
+
+Columns:
+
+- `project_id UUID NOT NULL REFERENCES projects(id)`
+- `user_id UUID NOT NULL REFERENCES users(id)`
+- `role VARCHAR(20) NOT NULL`
+- `joined_at TIMESTAMPTZ NOT NULL`
+- Composite primary key: `(project_id, user_id)`
+
+Allowed roles: `OWNER`, `MANAGER`, `MEMBER`, `VIEWER`.
+
+### Table 4: `issues`
+
+Columns:
+
+- `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+- `project_id UUID NOT NULL REFERENCES projects(id)`
+- `issue_number INTEGER NOT NULL`
+- `title VARCHAR(200) NOT NULL`
+- `description TEXT`
+- `issue_type VARCHAR(20) NOT NULL`
+- `status VARCHAR(20) NOT NULL DEFAULT 'TODO'`
+- `priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM'`
+- `reporter_id UUID NOT NULL REFERENCES users(id)`
+- `due_date DATE`
+- `estimated_hours NUMERIC(8,2)`
+- `created_at TIMESTAMPTZ NOT NULL`
+- `updated_at TIMESTAMPTZ NOT NULL`
+
+Allowed issue types: `TASK`, `BUG`, `STORY`, `EPIC`.
+
+Allowed statuses: `TODO`, `IN_PROGRESS`, `IN_REVIEW`, `DONE`, `CANCELLED`.
+
+Allowed priorities: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`.
+
+Constraints:
+
+- `UNIQUE(project_id, issue_number)`
+- `UNIQUE(id, project_id)` to support the composite foreign key in `issue_labels`
+- Issue numbers must be positive.
+- Estimated hours must be nonnegative.
+
+Generate issue numbers safely when multiple requests create issues concurrently. Do not use `MAX(issue_number) + 1` without transaction-safe locking or another concurrency-safe mechanism.
+
+### Table 5: `issue_comments`
+
+Columns:
+
+- `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+- `issue_id UUID NOT NULL REFERENCES issues(id)`
+- `author_id UUID NOT NULL REFERENCES users(id)`
+- `content TEXT NOT NULL`
+- `created_at TIMESTAMPTZ NOT NULL`
+- `updated_at TIMESTAMPTZ NOT NULL`
+
+Comments must not be empty or whitespace-only.
+
+### Table 6: `issue_assignees`
+
+Columns:
+
+- `issue_id UUID NOT NULL REFERENCES issues(id)`
+- `user_id UUID NOT NULL REFERENCES users(id)`
+- `assigned_at TIMESTAMPTZ NOT NULL`
+- Composite primary key: `(issue_id, user_id)`
+
+Support multiple assignees per issue.
+
+### Table 7: `labels`
+
+Columns:
+
+- `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+- `project_id UUID NOT NULL REFERENCES projects(id)`
+- `name VARCHAR(50) NOT NULL`
+- `color VARCHAR(7) NOT NULL DEFAULT '#808080'`
+- `created_at TIMESTAMPTZ NOT NULL`
+- `UNIQUE(project_id, name)`
+- `UNIQUE(id, project_id)`
+
+Validate hexadecimal color values.
+
+### Table 8: `issue_labels`
+
+Columns:
+
+- `issue_id UUID NOT NULL`
+- `label_id UUID NOT NULL`
+- `project_id UUID NOT NULL`
+- Composite primary key: `(issue_id, label_id)`
+
+Composite foreign keys:
+
+- `(issue_id, project_id)` references `issues(id, project_id) ON DELETE CASCADE`
+- `(label_id, project_id)` references `labels(id, project_id) ON DELETE CASCADE`
+
+Preserve these constraints so a label cannot be assigned to an issue from a different project.
+
+### Table 9: `issue_history`
+
+Columns:
+
+- `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+- `issue_id UUID NOT NULL REFERENCES issues(id)`
+- `changed_by UUID REFERENCES users(id) ON DELETE SET NULL`
+- `field_name VARCHAR(50) NOT NULL`
+- `old_value TEXT`
+- `new_value TEXT`
+- `changed_at TIMESTAMPTZ NOT NULL`
+
+Record meaningful issue changes, including status, priority, assignees and other supported fields. Capture the authenticated user as the actor. History should not be editable through ordinary client-facing APIs.
+
+### Existing database details
+
+The database also has indexes for frequently queried project, membership, issue, comment, assignee, label, and history fields.
+
+An existing `set_updated_at()` PostgreSQL trigger function updates `updated_at` on `users`, `projects`, `issues`, and `issue_comments`.
+
+Inspect the real schema if a database inspection connection is available. Otherwise, document any assumptions and generate a safe reconciliation plan.
+
+Do not create duplicate triggers, indexes, tables, or constraints.
+
+## 3. Database migrations and Hibernate configuration
+
+Implement Flyway migrations for future schema changes.
+
+Because the current database was created manually:
+
+1. Determine how the existing database will be brought under Flyway management.
+2. Do not run migrations against the populated Neon database until the migration baseline and existing schema have been verified.
+3. Do not generate a migration that blindly recreates existing tables.
+4. If necessary, provide a documented baseline procedure and a safe migration plan.
+5. Keep Hibernate schema handling set to validation rather than automatic destructive schema generation.
+
+Use configuration equivalent to:
+
+`spring.jpa.hibernate.ddl-auto=validate`
+
+Use appropriate PostgreSQL and Hibernate mappings for UUID, TIMESTAMPTZ, DATE, NUMERIC, enum strings, and composite keys.
+
+Avoid unnecessary bidirectional JPA relationships. Prevent N+1 queries and infinite JSON serialization. Use DTOs rather than serializing entities directly.
+
+Preserve the existing database triggers unless there is a documented reason to change them. Ensure timestamp handling is consistent between PostgreSQL and Hibernate.
+
+## 4. Required architecture
+
+Organize the backend into clear layers, using packages under `com.devtrack`:
+
+- `config`
+- `controller`
+- `dto`
+- `entity`
+- `enums`
+- `exception`
+- `repository`
+- `security`
+- `service`
+- `mapper`
+
+Use additional packages only when they improve maintainability.
+
+Responsibilities:
+
+- Controllers: HTTP routing and request/response handling.
+- DTOs: request and response contracts.
+- Services: business logic, authorization and transactions.
+- Repositories: database access through Spring Data JPA.
+- Entities: database mappings.
+- Mappers: entity-to-DTO and DTO-to-entity conversion where useful.
+- Security: authentication, JWT processing and authorization configuration.
+- Exception handlers: consistent API error responses.
+
+Use constructor injection. Avoid field injection, giant controllers, duplicated business logic, and unnecessary abstractions.
+
+Use `@Transactional` at appropriate service boundaries.
+
+## 5. Authentication and security
+
+Implement secure registration and login.
+
+Required endpoints:
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+
+Requirements:
+
+- Validate registration input.
+- Normalize email addresses consistently.
+- Enforce unique email addresses.
+- Hash passwords with BCrypt.
+- Verify hashes using BCrypt during login.
+- Never return passwords or hashes.
+- Return suitable HTTP status codes for invalid input, duplicate email, invalid credentials, and unauthorized requests.
+- Use Spring Security and JWT-based authentication.
+- Keep access tokens short-lived and configurable.
+- Store the signing secret or private key outside source control.
+- Validate token signature, expiration, issuer and other configured claims.
+- Never trust a client-provided user ID to establish identity.
+- Derive the current user from the authenticated security context.
+- Implement logout/token refresh only with a clearly designed token lifecycle and revocation strategy. Do not pretend a stateless JWT has been revoked when it has not.
+- Disable CSRF only when appropriate for the chosen stateless authentication design.
+- Configure CORS for explicitly configured frontend origins.
+- Do not use permissive wildcard CORS with credentials.
+- Return generic authentication failures where appropriate.
+- Do not allow public registration to assign `ADMIN` or `OWNER` platform privileges.
+- Never commit a default JWT secret or hard-coded production password.
+
+Use method-level authorization where helpful, but ensure resource-level checks are enforced in the service layer.
+
+## 6. Project management APIs
+
+Implement:
+
+- `POST /api/projects` — create a project.
+- `GET /api/projects` — list projects accessible to the authenticated user.
+- `GET /api/projects/{projectId}` — retrieve a project.
+- `PUT /api/projects/{projectId}` — update allowed project fields.
+- `DELETE /api/projects/{projectId}` — archive or safely delete a project according to the chosen lifecycle policy.
+- `GET /api/projects/{projectId}/members` — list members.
+- `POST /api/projects/{projectId}/members` — add a member.
+- `PUT /api/projects/{projectId}/members/{userId}` — change a member's role.
+- `DELETE /api/projects/{projectId}/members/{userId}` — remove a member.
+
+Business rules:
+
+- The creator becomes the project owner and an `OWNER` member.
+- Only authorized project members can view project data.
+- Enforce the role hierarchy for project administration.
+- A viewer cannot create or modify issues.
+- Members cannot promote themselves or others to unauthorized roles.
+- Protect the last owner from accidental removal or demotion.
+- Define explicit rules for project archiving and deletion.
+- Prevent unauthorized users from discovering private project details.
+
+## 7. Issue management APIs
+
+Implement:
+
+- `POST /api/projects/{projectId}/issues`
+- `GET /api/projects/{projectId}/issues`
+- `GET /api/issues/{issueId}`
+- `PUT /api/issues/{issueId}`
+- `PATCH /api/issues/{issueId}/status`
+- `DELETE /api/issues/{issueId}`
+
+Support filtering by status, priority, issue type, reporter, assignee, label and due date where practical.
+
+Support pagination, sorting and validated filter parameters. Never return every issue from a large project by default.
+
+Business rules:
+
+- The authenticated user becomes the reporter when creating an issue.
+- Validate project membership and write permissions.
+- Enforce valid status, priority and issue type values.
+- Validate due dates and estimated hours.
+- Ensure assigned users belong to the same project.
+- Generate issue numbers safely under concurrent creation.
+- Record meaningful changes in `issue_history`.
+- Do not accept `reporterId` or other security-sensitive identity fields blindly from clients.
+- Use transactions for issue updates and history records.
+- Implement a clear issue deletion policy, including its effect on comments, assignments, labels and history.
+
+## 8. Comments, assignees and labels
+
+Implement these endpoints, using consistent REST conventions:
+
+Comments:
+- `POST /api/issues/{issueId}/comments`
+- `GET /api/issues/{issueId}/comments`
+- `PUT /api/comments/{commentId}`
+- `DELETE /api/comments/{commentId}`
+
+Assignees:
+- `POST /api/issues/{issueId}/assignees`
+- `GET /api/issues/{issueId}/assignees`
+- `DELETE /api/issues/{issueId}/assignees/{userId}`
+
+Labels:
+- `POST /api/projects/{projectId}/labels`
+- `GET /api/projects/{projectId}/labels`
+- `PUT /api/labels/{labelId}`
+- `DELETE /api/labels/{labelId}`
+- `PUT /api/issues/{issueId}/labels`
+
+Enforce project boundaries, uniqueness, valid colors, permissions and appropriate comment ownership rules. Do not permit cross-project label or assignment operations.
+
+## 9. API design and validation
+
+Use consistent JSON responses and HTTP status codes.
+
+Recommended status codes:
+
+- `200 OK` for successful reads and updates.
+- `201 Created` for resource creation.
+- `204 No Content` for successful operations with no response body.
+- `400 Bad Request` for invalid input.
+- `401 Unauthorized` for missing or invalid authentication.
+- `403 Forbidden` for insufficient permissions.
+- `404 Not Found` for inaccessible or nonexistent resources, according to the chosen information-disclosure policy.
+- `409 Conflict` for duplicate or conflicting operations.
+
+Use request DTO validation, including `@Valid`, `@NotBlank`, `@Email`, `@Size`, and appropriate numeric/date constraints.
+
+Implement centralized error handling using `@RestControllerAdvice`. Prefer Spring's `ProblemDetail` or another consistent error contract.
+
+Include field-level validation errors where appropriate, without leaking SQL, stack traces, credentials or internal implementation details.
+
+Do not use `ResponseStatusException` as the sole exception-handling strategy throughout the finished application.
+
+## 10. Production-ready PostgreSQL and application configuration
+
+Create clean configurations for local development and production.
+
+Requirements:
+
+- Read database URL, username and password from environment variables.
+- Keep `ddl-auto=validate`.
+- Use TLS for Neon.
+- Do not print passwords, tokens or complete database URLs containing secrets.
+- Configure connection pooling appropriately for the deployment platform and Neon connection limits.
+- Make pool size configurable.
+- Configure connection and query timeouts where appropriate.
+- Keep `spring.jpa.open-in-view=false`.
+- Keep verbose SQL logging disabled in production.
+- Use structured or consistently formatted application logs without sensitive values.
+- Set a configurable timezone strategy and use UTC for timestamps where practical.
+- Configure sensible HTTP request, pagination and validation limits.
+- Ensure application startup failures clearly identify configuration problems without exposing secrets.
+
+Use `application.properties` or the existing configuration style consistently. Do not duplicate conflicting settings across profiles.
+
+## 11. Health checks and observability
+
+Use Spring Boot Actuator.
+
+Provide a health endpoint suitable for deployment health checks:
+
+- `/actuator/health`
+
+Configure the necessary health indicators for the database and application.
+
+Do not expose environment variables, configuration properties, heap dumps, or sensitive Actuator endpoints publicly.
+
+Add useful startup logs, request error logs and basic operational visibility without logging passwords, JWTs or private user data.
+
+## 12. Deployment and containerization
+
+Deployment is a major priority. Prepare the backend to run outside my local machine.
+
+Create:
+
+1. A production-ready multi-stage `Dockerfile`.
+2. A `.dockerignore`.
+3. A `.env.example` containing placeholders only.
+4. A deployment README with step-by-step instructions.
+5. A health-check configuration suitable for a container host.
+6. A production configuration using environment variables.
+7. A database migration and rollback/recovery guide.
+8. Instructions for connecting the deployed backend to Neon.
+9. Instructions for connecting the deployed React frontend using the configured CORS origins.
+
+Container requirements:
+
+- Build with Maven and run using a suitable Java 21 runtime image.
+- Run as a non-root user.
+- Do not copy `.env`, credentials, private keys or local build caches into the image.
+- Keep the image reasonably small.
+- Handle container shutdown gracefully.
+- Bind the application to the host-provided port when required, such as `${PORT:8080}`.
+- Ensure health checks do not rely on a developer's local environment.
+- Make the container reproducible and suitable for a managed container platform.
+
+Deployment documentation must explain how to configure:
+
+- `DB_JDBC_URL`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+- `JWT_SECRET` or the chosen signing-key configuration
+- `CORS_ALLOWED_ORIGINS`
+- `PORT`, if supported by the hosting platform
+- Any required Flyway or application profile settings
+
+Never hard-code a secret into a Dockerfile or commit a real `.env` file.
+
+Provide deployment instructions for a suitable managed container platform. Prefer a low-cost option with a free tier if currently available, but clearly explain possible sleep/cold-start behavior, resource limitations, usage limits and billing risks. Keep the Docker image portable so the hosting provider can be changed later.
+
+The frontend and backend will be deployed separately. Explain how to set the production API base URL in React.
+
+Do not claim the app has been deployed unless an actual deployment has been completed and verified.
+
+## 13. Testing requirements
+
+Create meaningful automated tests for the entire backend.
+
+Include:
+
+- Registration success.
+- Duplicate email.
+- Invalid registration data.
+- Login success and invalid credentials.
+- JWT authentication and unauthorized requests.
+- Project creation and access control.
+- Member role authorization.
+- Issue creation, updates and status changes.
+- Concurrent-safe issue numbering.
+- Assignment validation.
+- Label project-boundary validation.
+- Comment permissions.
+- History generation.
+- Pagination and filtering.
+- Validation and centralized error responses.
+
+Use unit tests for isolated business logic and integration tests for persistence, migrations and security behavior.
+
+Use PostgreSQL-compatible integration testing. Testcontainers may be used if available. If Docker is unavailable, explain the limitation and provide a reliable alternative without silently replacing PostgreSQL with an incompatible database.
+
+Do not make tests dependent on the live production database. Use a dedicated test database or isolated test environment.
+
+Ensure test data is cleaned up and tests do not modify production data.
+
+Run Maven tests and fix compilation failures and regressions. Report any tests that could not be executed and why.
+
+## 14. Documentation
+
+Create or update `README.md` with:
+
+- Project overview and architecture.
+- Prerequisites.
+- Local development setup.
+- Neon connection configuration.
+- Environment variables.
+- Database migration and baseline procedure.
+- How to run the application.
+- How to run tests.
+- Authentication flow.
+- API endpoint documentation.
+- Swagger/OpenAPI configuration.
+- Docker build and run instructions.
+- Deployment instructions.
+- Production security checklist.
+- Troubleshooting for common database and deployment errors.
+
+Provide example requests and responses without real credentials.
+
+## 15. Implementation workflow — follow this carefully
+
+Do not attempt a blind, one-shot rewrite of the entire project.
+
+### Phase 1: Inspect and plan
+
+- Inspect all files and existing code.
+- Identify the exact Spring Boot and dependency versions.
+- Check whether registration code already exists.
+- Compare the expected schema with existing entity mappings and the actual database where possible.
+- Identify migration, security, and deployment risks.
+- Produce a concise implementation plan with files to create or modify.
+
+Do not delete working code or change the database at this stage.
+
+### Phase 2: Core foundation
+
+- Align entities, enums and repositories.
+- Establish DTO conventions and exception handling.
+- Add Flyway carefully, including a safe baseline plan for the existing database.
+- Implement authentication and registration.
+- Add tests.
+
+### Phase 3: Business features
+
+- Implement projects and memberships.
+- Implement issues and issue numbering.
+- Implement comments, assignees, labels and issue history.
+- Add resource-level authorization and tests for every feature.
+
+### Phase 4: Deployment
+
+- Implement Docker and production configuration.
+- Configure Actuator and health checks.
+- Add environment-variable documentation.
+- Add deployment and migration instructions.
+- Validate the container build and application startup where tooling permits.
+
+### Phase 5: Final verification
+
+- Run `mvn test`.
+- Run a Maven package/build.
+- Resolve compilation and test failures.
+- Inspect for security weaknesses, exposed secrets, missing authorization, N+1 queries and incorrect transaction boundaries.
+- Check that schema validation and Flyway configuration do not unexpectedly destroy or recreate existing tables.
+- Verify that all required endpoints are documented.
+- Summarize the implemented features, files changed, tests executed, outstanding issues and deployment steps.
+
+If an external service, deployment account or production database access is unavailable, do not invent results. Implement what can be completed locally and document the exact remaining manual steps.
+
+## 16. Code quality rules
+
+- Follow Java and Spring Boot conventions.
+- Use descriptive names and small, cohesive methods.
+- Avoid duplicated business logic.
+- Use constructor injection.
+- Use enums for fixed domain values.
+- Use pagination for collection endpoints.
+- Use explicit authorization checks.
+- Keep entities separate from API DTOs.
+- Avoid unnecessary Lombok or additional libraries.
+- Do not expose JPA entities directly.
+- Do not catch and ignore exceptions.
+- Do not disable tests to make the build pass.
+- Do not use permissive security configuration merely to make requests work.
+- Never commit secrets.
+- Preserve existing working functionality.
+
+Start with Phase 1. Show me the repository findings and implementation plan first, then proceed phase by phase. Ask me before any destructive database operation, major dependency upgrade, or change that could compromise existing data.
+
+The goal is a maintainable DevTrack backend that works locally, passes tests, connects securely to Neon, and is ready to deploy as a container.

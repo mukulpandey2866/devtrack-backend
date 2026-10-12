@@ -1,4 +1,4 @@
-package com.devtrack.devtrack_backend.entity;
+package com.devtrack.devtrack_backend.enums;
 
 public enum PlatformRole {
     USER,
