@@ -1,5 +1,4 @@
 # Read Me First
-Test-NetConnection ep-frosty-sunset-b5l5ngdh-pooler.c-7.us-east-2.aws.neon.tech -Port 5432
 The following was discovered as part of building this project:
 
 * The original package name 'com.devtrack.devtrack-backend' is invalid and this project uses 'com.devtrack.devtrack_backend' instead.
