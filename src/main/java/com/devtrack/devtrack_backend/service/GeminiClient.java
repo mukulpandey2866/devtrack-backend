@@ -73,15 +73,15 @@ public class GeminiClient {
             responseBody = post(requestJson);
         } catch (RestClientResponseException ex) {
             if (ex.getStatusCode().value() != 503) {
-                throw mapHttpError(ex.getStatusCode().value());
+                throw mapHttpError(ex);
             }
             // Gemini answers 503 when the model is overloaded; one short retry usually succeeds.
-            log.warn("Gemini returned HTTP 503, retrying once");
+            log.warn("Gemini returned HTTP 503 ({}), retrying once", providerError(ex));
             pause();
             try {
                 responseBody = post(requestJson);
             } catch (RestClientResponseException retryEx) {
-                throw mapHttpError(retryEx.getStatusCode().value());
+                throw mapHttpError(retryEx);
             } catch (ResourceAccessException retryEx) {
                 throw mapNetworkError(retryEx);
             } catch (RestClientException retryEx) {
@@ -119,8 +119,21 @@ public class GeminiClient {
         return new AiServiceException(HttpStatus.BAD_GATEWAY, "The AI provider returned an unexpected response");
     }
 
-    private AiServiceException mapHttpError(int status) {
-        log.warn("Gemini returned HTTP {}", status);
+    // Gemini's error status and message are logged for operators only and never returned to clients.
+    private String providerError(RestClientResponseException ex) {
+        try {
+            JsonNode error = jsonMapper.readTree(ex.getResponseBodyAsString()).path("error");
+            String message = error.path("message").asString("");
+            return "status=" + error.path("status").asString("?") + ", message="
+                    + (message.length() > 200 ? message.substring(0, 200) : message);
+        } catch (RuntimeException e) {
+            return "unparseable error body";
+        }
+    }
+
+    private AiServiceException mapHttpError(RestClientResponseException ex) {
+        int status = ex.getStatusCode().value();
+        log.warn("Gemini returned HTTP {} ({})", status, providerError(ex));
         if (status == 429) {
             return new AiServiceException(HttpStatus.TOO_MANY_REQUESTS,
                     "The AI provider rate limit or quota has been reached; try again later");
