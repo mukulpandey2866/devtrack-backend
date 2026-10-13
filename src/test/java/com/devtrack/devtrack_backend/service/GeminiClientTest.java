@@ -28,13 +28,18 @@ class GeminiClientTest {
 
     private static final String API_KEY = "test-key-do-not-leak";
     private static final String URL = "https://gemini.test/v1beta/models/test-model:generateContent";
+    private static final String FALLBACK_URL = "https://gemini.test/v1beta/models/fallback-model:generateContent";
 
     private MockRestServiceServer server;
 
     private GeminiClient client(String apiKey) {
+        return client(apiKey, "");
+    }
+
+    private GeminiClient client(String apiKey, String fallbackModel) {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gemini.test");
         server = MockRestServiceServer.bindTo(builder).build();
-        GeminiProperties properties = new GeminiProperties(apiKey, "test-model", "https://gemini.test",
+        GeminiProperties properties = new GeminiProperties(apiKey, "test-model", fallbackModel, "https://gemini.test",
                 Duration.ofSeconds(1), Duration.ofSeconds(1), 2048);
         return new GeminiClient(builder.build(), properties, JsonMapper.builder().build(), Duration.ZERO);
     }
@@ -145,6 +150,47 @@ class GeminiClientTest {
     }
 
     @Test
+    void overloadedModelFallsBackToTheFallbackModel() {
+        GeminiClient client = client(API_KEY, "fallback-model");
+        server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        server.expect(requestTo(FALLBACK_URL)).andRespond(withSuccess(candidate("{\"ok\":true}", "STOP"),
+                org.springframework.http.MediaType.APPLICATION_JSON));
+
+        assertThat(generate(client)).isEqualTo("{\"ok\":true}");
+        server.verify();
+    }
+
+    @Test
+    void timeoutFallsBackToTheFallbackModelButIsNotRetriedWithoutOne() {
+        GeminiClient client = client(API_KEY, "fallback-model");
+        server.expect(requestTo(URL)).andRespond(withException(new SocketTimeoutException("Read timed out")));
+        server.expect(requestTo(FALLBACK_URL)).andRespond(withSuccess(candidate("{\"ok\":true}", "STOP"),
+                org.springframework.http.MediaType.APPLICATION_JSON));
+        assertThat(generate(client)).isEqualTo("{\"ok\":true}");
+        server.verify();
+
+        // No fallback configured: a single attempt, then 504.
+        GeminiClient noFallback = client(API_KEY);
+        server.expect(requestTo(URL)).andRespond(withException(new SocketTimeoutException("Read timed out")));
+        assertThat(failure(noFallback).getStatus()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
+        server.verify();
+    }
+
+    @Test
+    void fallbackIsNotUsedForRateLimitsAndItsFailureIsMapped() {
+        GeminiClient client = client(API_KEY, "fallback-model");
+        server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+        assertThat(failure(client).getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        server.verify();
+
+        client = client(API_KEY, "fallback-model");
+        server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        server.expect(requestTo(FALLBACK_URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        assertThat(failure(client).getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        server.verify();
+    }
+
+    @Test
     void timeoutMapsTo504() {
         GeminiClient client = client(API_KEY);
         server.expect(requestTo(URL)).andRespond(withException(new SocketTimeoutException("Read timed out")));
@@ -191,11 +237,11 @@ class GeminiClientTest {
 
     @Test
     void propertiesNeverPrintTheApiKey() {
-        GeminiProperties properties = new GeminiProperties(API_KEY, null, null, null, null, 0);
+        GeminiProperties properties = new GeminiProperties(API_KEY, null, null, null, null, null, 0);
 
         assertThat(properties.toString()).doesNotContain(API_KEY);
         assertThat(properties.model()).isEqualTo(GeminiProperties.DEFAULT_MODEL);
-        assertThatThrownBy(() -> new GeminiProperties(API_KEY, "bad/model", null, null, null, 0))
+        assertThatThrownBy(() -> new GeminiProperties(API_KEY, "bad/model", null, null, null, null, 0))
                 .isInstanceOf(IllegalStateException.class);
     }
 }

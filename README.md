@@ -88,7 +88,8 @@ naming the variable (never its value).
 | `SHUTDOWN_TIMEOUT` | no | `25s` | Graceful shutdown wait |
 | `GEMINI_API_KEY` | for AI | empty (AI endpoint returns 503) | Google AI Studio key; set only in `.env` (untracked) or the host's secret store |
 | `GEMINI_MODEL` | no | `gemini-3.5-flash-lite` | Any text model from the Gemini models page (e.g. `gemini-3.8-flash`) |
-| `GEMINI_CONNECT_TIMEOUT` / `GEMINI_READ_TIMEOUT` | no | `5s` / `45s` | Provider timeouts (one retry on provider 503) |
+| `GEMINI_CONNECT_TIMEOUT` / `GEMINI_READ_TIMEOUT` | no | `5s` / `25s` | Provider timeouts (per attempt) |
+| `GEMINI_FALLBACK_MODEL` | no | `gemini-3.8-flash` | Used once if the primary model returns 503 or times out; empty disables it, and then 503 is retried once on the primary |
 | `GEMINI_MAX_OUTPUT_TOKENS` | no | `2048` | Output cap per draft |
 | `AI_RATE_LIMIT_PER_MINUTE` | no | `10` | Per-user, per instance |
 

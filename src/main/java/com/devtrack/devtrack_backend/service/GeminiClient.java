@@ -68,36 +68,55 @@ public class GeminiClient {
                 "generationConfig", generationConfig);
 
         String requestJson = jsonMapper.writeValueAsString(request);
+        String model = properties.model();
+        String fallback = properties.fallbackModel();
         String responseBody;
         try {
-            responseBody = post(requestJson);
-        } catch (RestClientResponseException ex) {
-            if (ex.getStatusCode().value() != 503) {
-                throw mapHttpError(ex);
-            }
-            // Gemini answers 503 when the model is overloaded; one short retry usually succeeds.
-            log.warn("Gemini returned HTTP 503 ({}), retrying once", providerError(ex));
-            pause();
-            try {
-                responseBody = post(requestJson);
-            } catch (RestClientResponseException retryEx) {
-                throw mapHttpError(retryEx);
-            } catch (ResourceAccessException retryEx) {
-                throw mapNetworkError(retryEx);
-            } catch (RestClientException retryEx) {
-                throw unexpectedResponse(retryEx);
-            }
-        } catch (ResourceAccessException ex) {
-            throw mapNetworkError(ex);
+            responseBody = post(model, requestJson);
         } catch (RestClientException ex) {
-            throw unexpectedResponse(ex);
+            // Overload (503) is retried; a timeout is only retried on a different model, to bound total latency.
+            boolean overloaded = ex instanceof RestClientResponseException re && re.getStatusCode().value() == 503;
+            boolean timedOut = ex instanceof ResourceAccessException ra && isTimeout(ra);
+            if (!overloaded && !(timedOut && !fallback.isEmpty())) {
+                throw translate(ex);
+            }
+            String next = fallback.isEmpty() ? model : fallback;
+            log.warn("Gemini model {} unavailable ({}), retrying with {}", model,
+                    ex instanceof RestClientResponseException re ? providerError(re) : "timeout", next);
+            if (next.equals(model)) {
+                pause();
+            }
+            try {
+                responseBody = post(next, requestJson);
+            } catch (RestClientException retryEx) {
+                throw translate(retryEx);
+            }
         }
         return extractText(responseBody);
     }
 
-    private String post(String requestJson) {
+    private AiServiceException translate(RestClientException ex) {
+        if (ex instanceof RestClientResponseException re) {
+            return mapHttpError(re);
+        }
+        if (ex instanceof ResourceAccessException ra) {
+            return mapNetworkError(ra);
+        }
+        return unexpectedResponse(ex);
+    }
+
+    private static boolean isTimeout(ResourceAccessException ex) {
+        for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+            if (cause instanceof HttpTimeoutException || cause instanceof java.net.SocketTimeoutException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String post(String model, String requestJson) {
         return restClient.post()
-                .uri("/v1beta/models/{model}:generateContent", properties.model())
+                .uri("/v1beta/models/{model}:generateContent", model)
                 .header("x-goog-api-key", properties.apiKey())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(requestJson)
@@ -150,11 +169,9 @@ public class GeminiClient {
     }
 
     private AiServiceException mapNetworkError(ResourceAccessException ex) {
-        for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
-            if (cause instanceof HttpTimeoutException || cause instanceof java.net.SocketTimeoutException) {
-                log.warn("Gemini call timed out");
-                return new AiServiceException(HttpStatus.GATEWAY_TIMEOUT, "The AI provider took too long to respond");
-            }
+        if (isTimeout(ex)) {
+            log.warn("Gemini call timed out");
+            return new AiServiceException(HttpStatus.GATEWAY_TIMEOUT, "The AI provider took too long to respond");
         }
         Throwable root = ex.getMostSpecificCause();
         log.warn("Gemini call failed: {}", (root instanceof IOException ? root : ex).getClass().getSimpleName());
