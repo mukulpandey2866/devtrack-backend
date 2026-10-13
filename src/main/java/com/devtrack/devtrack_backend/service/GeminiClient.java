@@ -4,6 +4,7 @@ import com.devtrack.devtrack_backend.config.GeminiProperties;
 import com.devtrack.devtrack_backend.exception.AiServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.net.http.HttpTimeoutException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,10 +37,18 @@ public class GeminiClient {
     private final GeminiProperties properties;
     private final JsonMapper jsonMapper;
 
+    private final Duration retryDelay;
+
+    @Autowired
     public GeminiClient(RestClient geminiRestClient, GeminiProperties properties, JsonMapper jsonMapper) {
+        this(geminiRestClient, properties, jsonMapper, Duration.ofSeconds(1));
+    }
+
+    GeminiClient(RestClient geminiRestClient, GeminiProperties properties, JsonMapper jsonMapper, Duration retryDelay) {
         this.restClient = geminiRestClient;
         this.properties = properties;
         this.jsonMapper = jsonMapper;
+        this.retryDelay = retryDelay;
     }
 
     public String generateJson(String systemInstruction, String userContent, Map<String, Object> responseSchema) {
@@ -57,24 +67,56 @@ public class GeminiClient {
                 "contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", userContent)))),
                 "generationConfig", generationConfig);
 
+        String requestJson = jsonMapper.writeValueAsString(request);
         String responseBody;
         try {
-            responseBody = restClient.post()
-                    .uri("/v1beta/models/{model}:generateContent", properties.model())
-                    .header("x-goog-api-key", properties.apiKey())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(jsonMapper.writeValueAsString(request))
-                    .retrieve()
-                    .body(String.class);
+            responseBody = post(requestJson);
         } catch (RestClientResponseException ex) {
-            throw mapHttpError(ex.getStatusCode().value());
+            if (ex.getStatusCode().value() != 503) {
+                throw mapHttpError(ex.getStatusCode().value());
+            }
+            // Gemini answers 503 when the model is overloaded; one short retry usually succeeds.
+            log.warn("Gemini returned HTTP 503, retrying once");
+            pause();
+            try {
+                responseBody = post(requestJson);
+            } catch (RestClientResponseException retryEx) {
+                throw mapHttpError(retryEx.getStatusCode().value());
+            } catch (ResourceAccessException retryEx) {
+                throw mapNetworkError(retryEx);
+            } catch (RestClientException retryEx) {
+                throw unexpectedResponse(retryEx);
+            }
         } catch (ResourceAccessException ex) {
             throw mapNetworkError(ex);
         } catch (RestClientException ex) {
-            log.warn("Gemini call failed: {}", ex.getClass().getSimpleName());
-            throw new AiServiceException(HttpStatus.BAD_GATEWAY, "The AI provider returned an unexpected response");
+            throw unexpectedResponse(ex);
         }
         return extractText(responseBody);
+    }
+
+    private String post(String requestJson) {
+        return restClient.post()
+                .uri("/v1beta/models/{model}:generateContent", properties.model())
+                .header("x-goog-api-key", properties.apiKey())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(requestJson)
+                .retrieve()
+                .body(String.class);
+    }
+
+    private void pause() {
+        try {
+            Thread.sleep(retryDelay.toMillis());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new AiServiceException(HttpStatus.SERVICE_UNAVAILABLE, "The AI provider is temporarily unavailable");
+        }
+    }
+
+    private AiServiceException unexpectedResponse(RestClientException ex) {
+        log.warn("Gemini call failed: {}", ex.getClass().getSimpleName());
+        return new AiServiceException(HttpStatus.BAD_GATEWAY, "The AI provider returned an unexpected response");
     }
 
     private AiServiceException mapHttpError(int status) {

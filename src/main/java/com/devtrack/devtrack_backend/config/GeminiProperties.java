@@ -20,7 +20,7 @@ public record GeminiProperties(String apiKey, String model, String baseUrl, Dura
         model = model == null || model.isBlank() ? DEFAULT_MODEL : model.trim();
         baseUrl = baseUrl == null || baseUrl.isBlank() ? DEFAULT_BASE_URL : baseUrl.trim();
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(5) : connectTimeout;
-        readTimeout = readTimeout == null ? Duration.ofSeconds(30) : readTimeout;
+        readTimeout = readTimeout == null ? Duration.ofSeconds(45) : readTimeout;
         maxOutputTokens = maxOutputTokens == 0 ? 2048 : maxOutputTokens;
 
         if (!MODEL_NAME.matcher(model).matches()) {

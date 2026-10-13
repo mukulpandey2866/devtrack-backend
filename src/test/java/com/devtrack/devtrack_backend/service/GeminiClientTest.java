@@ -36,7 +36,7 @@ class GeminiClientTest {
         server = MockRestServiceServer.bindTo(builder).build();
         GeminiProperties properties = new GeminiProperties(apiKey, "test-model", "https://gemini.test",
                 Duration.ofSeconds(1), Duration.ofSeconds(1), 2048);
-        return new GeminiClient(builder.build(), properties, JsonMapper.builder().build());
+        return new GeminiClient(builder.build(), properties, JsonMapper.builder().build(), Duration.ZERO);
     }
 
     private String generate(GeminiClient client) {
@@ -121,6 +121,27 @@ class GeminiClientTest {
         AiServiceException ex = failure(client);
         assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY);
         assertThat(ex.getMessage()).doesNotContain("raw provider detail");
+    }
+
+    @Test
+    void overloadedProviderIsRetriedOnceThenSucceeds() {
+        GeminiClient client = client(API_KEY);
+        server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        server.expect(requestTo(URL)).andRespond(withSuccess(candidate("{\"ok\":true}", "STOP"),
+                org.springframework.http.MediaType.APPLICATION_JSON));
+
+        assertThat(generate(client)).isEqualTo("{\"ok\":true}");
+        server.verify();
+    }
+
+    @Test
+    void persistentOverloadStopsAfterOneRetry() {
+        GeminiClient client = client(API_KEY);
+        server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        assertThat(failure(client).getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        server.verify();
     }
 
     @Test
