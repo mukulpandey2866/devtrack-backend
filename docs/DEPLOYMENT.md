@@ -41,6 +41,9 @@ Generic steps (identical for Render, Railway, Fly.io, Google Cloud Run, Azure Co
 3. Set environment variables in the provider's secret/environment settings (never in the repo):
    `DB_JDBC_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `CORS_ALLOWED_ORIGINS`, `SPRING_PROFILES_ACTIVE=prod`.
    Leave `PORT` to the host if it injects one; the app reads it.
+   For the AI issue assistant also set `GEMINI_API_KEY` (as a secret) and optionally `GEMINI_MODEL`
+   (default `gemini-3.5-flash-lite`). Without the key the app starts normally and `POST /api/ai/issues/draft` returns 503.
+   The key is created in Google AI Studio; never commit it or put it in a `.env.example`.
 4. Set the health check path to `/actuator/health` (or `/actuator/health/liveness` if you want database blips not to
    restart the service).
 5. Deploy and watch the logs for `Started DevtrackBackendApplication`.

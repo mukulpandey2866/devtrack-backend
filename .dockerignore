@@ -1,0 +1,15 @@
+.git
+.gitignore
+.idea
+.vscode
+*.iml
+target
+.env
+.env.*
+!.env.example
+docs
+*.md
+task.txt
+mvnw
+mvnw.cmd
+.mvn

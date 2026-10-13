@@ -1,6 +1,9 @@
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\config\ClockConfig.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\config\GeminiConfig.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\config\GeminiProperties.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\config\OpenApiConfig.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\config\SecurityConfig.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\controller\AiController.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\controller\AssigneeController.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\controller\AuthController.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\controller\CommentController.java
@@ -8,9 +11,12 @@ C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\controller\LabelController.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\controller\ProjectController.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\controller\ProjectMemberController.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\controller\RootController.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\DevtrackBackendApplication.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\dto\AddAssigneeRequest.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\dto\AddMemberRequest.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\dto\AiIssueDraftRequest.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\dto\AiIssueDraftResponse.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\dto\AssigneeResponse.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\dto\AuthResponse.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\dto\CommentRequest.java
@@ -52,6 +58,7 @@ C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\enums\PlatformRole.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\enums\ProjectRole.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\enums\ProjectStatus.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\exception\AiServiceException.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\exception\ApiException.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\exception\BadRequestException.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\exception\ConflictException.java
@@ -79,9 +86,12 @@ C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\security\JwtService.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\security\JwtUserAuthenticationConverter.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\security\ProblemDetailSecurityHandlers.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\AiIssueDraftService.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\AiRateLimiter.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\AssigneeService.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\AuthService.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\CommentService.java
+C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\GeminiClient.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\IssueAssembler.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\IssueHistoryRecorder.java
 C:\Users\UWS1T6K\columbus_fap\Personal Github Projects\DevTrack\devtrack-backend\src\main\java\com\devtrack\devtrack_backend\service\IssueService.java

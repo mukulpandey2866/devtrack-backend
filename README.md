@@ -86,6 +86,11 @@ naming the variable (never its value).
 | `SPRING_FLYWAY_URL` / `_USER` / `_PASSWORD` | no | datasource | Direct (non-pooled) Neon connection for migrations |
 | `APP_TIME_ZONE` | no | `UTC` | JVM and Hibernate JDBC time zone |
 | `SHUTDOWN_TIMEOUT` | no | `25s` | Graceful shutdown wait |
+| `GEMINI_API_KEY` | for AI | empty (AI endpoint returns 503) | Google AI Studio key; set only in `.env` (untracked) or the host's secret store |
+| `GEMINI_MODEL` | no | `gemini-3.5-flash-lite` | Any text model from the Gemini models page (e.g. `gemini-3.8-flash`) |
+| `GEMINI_CONNECT_TIMEOUT` / `GEMINI_READ_TIMEOUT` | no | `5s` / `30s` | Provider timeouts |
+| `GEMINI_MAX_OUTPUT_TOKENS` | no | `2048` | Output cap per draft |
+| `AI_RATE_LIMIT_PER_MINUTE` | no | `10` | Per-user, per instance |
 
 ## Tests
 
@@ -160,11 +165,17 @@ They are disabled in the `prod` profile. Collection endpoints take `page` (from 
 | `POST/GET /api/projects/{id}/labels` | Create (MANAGER) / list (VIEWER); `color` is `#RRGGBB` | see left |
 | `PUT/DELETE /api/labels/{id}` | Rename/recolor, delete | MANAGER |
 | `PUT /api/issues/{id}/labels` | Replace the issue's label set (labels must belong to the same project) | MEMBER |
+| `POST /api/ai/issues/draft` | AI issue draft (nothing is saved); body `{projectId?, title?, description?}`, at least one of title/description; if `projectId` is given the caller needs MEMBER on an active project | MEMBER |
 | `GET /actuator/health` (+ `/liveness`, `/readiness`) | Health checks | public |
 
 Status codes: `200` read/update, `201` create, `204` no body, `400` invalid input, `401` missing/invalid token,
 `403` insufficient role, `404` not found or not visible to you, `409` duplicate or conflicting state (duplicate email,
-project key or label name, archived project, last owner).
+project key or label name, archived project, last owner). The AI draft endpoint also returns `422` (provider refused the
+content), `429` (local or provider rate limit), `502` (unusable model output), `503` (not configured or provider down)
+and `504` (provider timeout).
+
+AI draft response (`200`): `{"title":"...","description":"...","acceptanceCriteria":["..."],"suggestedLabels":["bug"]}`.
+The user reviews it, then saves it through `POST /api/projects/{id}/issues`.
 
 Example:
 
